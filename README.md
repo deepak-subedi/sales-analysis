@@ -20,146 +20,110 @@ Below are the SQL statements for cleansing and transforming necessary data.
 
 ### DIM_Calendar
 
-SELECT 
-	[DateKey] AS DateKey
-      ,[FullDateAlternateKey] AS Date
-      ,[EnglishDayNameOfWeek] AS Day
-      ,[WeekNumberOfYear] AS WeekNo
-      ,[EnglishMonthName] AS Month,
-	  LEFT([EnglishMonthName], 3) AS MonthShort
-      ,[MonthNumberOfYear] AS MonthNo
-      ,[CalendarQuarter] AS Quarter
-      ,[CalendarYear] AS Year
-FROM 
-	dbo.DimDate
-WHERE
-	CalendarYear >= 2019
+SELECT <br />
+	[DateKey] AS DateKey <br />
+      ,[FullDateAlternateKey] AS Date <br />
+      ,[EnglishDayNameOfWeek] AS Day <br />
+      ,[WeekNumberOfYear] AS WeekNo <br />
+      ,[EnglishMonthName] AS Month, <br />
+	  LEFT([EnglishMonthName], 3) AS MonthShort <br />
+      ,[MonthNumberOfYear] AS MonthNo <br />
+      ,[CalendarQuarter] AS Quarter <br />
+      ,[CalendarYear] AS Year <br />
+FROM <br />
+	dbo.DimDate <br />
+WHERE <br />
+	CalendarYear >= 2019 <br />
 
-![GitHub Fact_Exercise](/images/Fact_Exercise.PNG)
+### DIM_Customer
 
-Following steps were done in Power BI to transform this table to be ready for analysis purposes:
-
-    Promoted row so that the data so that the first row was used as headers.
-    Removed unnecessary columns.
-    Changed column to have the correct type (date, numbers etc.) for later use in calculations.
-    
-![GitHub Fact_Exercise](/images/Fact_Activity_steps.PNG)
+SELECT <br />
+	c.CustomerKey AS CustomerKey, <br />
+	c.FirstName AS FirstName, <br />
+	c.LastName AS LastName, <br />
+	c.FirstName + ' ' + c.LastName AS FullName, <br />
+	CASE c.gender <br />
+		WHEN 'M' then 'Male' <br />
+		WHEN 'F' then 'Female' <br />
+	END AS Gender, <br />
+	c.DateFirstPurchase as DateFirstPurchase, <br />
+	g.City as  CustomerCity <br />
+FROM <br />
+	dbo.DimCustomer AS c <br />
+LEFT JOIN <br />
+	dbo.DimGeography As g <br />
+ON c.GeographyKey = g.GeographyKey <br />
+ORDER BY <br />
+	c.CustomerKey ASC <br />
     
 ### DIM_Activity
-DIM_Activity describes two different types of activities: Walking and running. On some days walking was chosen as a preferred activity time, and other days running were performed.
 
-![GitHub Fact_Exercise](/images/Dim_Activity.PNG)
+SELECT <br />
+	p.[ProductKey], <br />
+	p.[ProductAlternateKey] AS ProductItemCode, <br />
+	p.[EnglishProductName] AS [ProductName], <br />
+	ps.[EnglishProductSubcategoryName] AS ProductSubCategory, <br />
+	pc.[EnglishProductCategoryName] AS ProductCategory, <br />
+	p.[Color] AS ProductColor, <br />
+	p.[Size] AS ProductSize, <br />
+	p.[ProductLine] AS ProductLine, <br />
+	p.[ModelName] AS ProductModelName, <br />
+	p.[EnglishDescription] AS ProductDescription, <br />
+	ISNULL (p.[Status], 'Outdated') AS ProductStatus <br />
+FROM dbo.DimProduct AS p <br />
+LEFT JOIN dbo.DimProductSubcategory AS ps ON p.ProductSubcategoryKey = ps.ProductSubcategoryKey <br />
+LEFT JOIN dbo.DimProductCategory AS pc ON ps.ProductCategoryKey = pc.ProductCategoryKey <br />
+ORDER BY <br />
+	p.ProductKey ASC <br />
+	
 
- Following steps were done in Power BI to transform this table to be ready for analysis purposes:
+### FACT_InternetSales 
 
-    Promoted row so that the data so that the first row was used.
-    Renamed necessary columns to give better business friendly names.
-    Capitalized each for in the description column for improved data quality.
-    
-![GitHub Fact_Exercise](/images/Dim_Activity_steps.PNG)
-    
-### DIM_Date
-
-The DIM_Date dimension is based on a simple table with dates, where date was used to derive several new fields which would be used in the exercise analysis dashboard:
-
-    Promoted row so that the data so that the first row was used.
-    Changed the column to DateType
-    Inserted several new columns based on the date.
-    
-![GitHub Fact_Exercise](/images/Dim_Date_steps.PNG)
+SELECT <br />
+  [ProductKey], <br />
+  [OrderDateKey], <br />
+  [DueDateKey], <br />
+  [ShipDateKey], <br />
+  [CustomerKey], <br />
+  [SalesOrderNumber], <br />
+  [SalesAmount] <br />
+FROM <br />
+  dbo.FactInternetSales <br />
+WHERE <br />
+  LEFT (OrderDateKey, 4) >= YEAR(GETDATE()) - 2 -- Ensures we always only bring two years of date from extraction. <br />
+ORDER BY <br />
+  OrderDateKey ASC <br />
+  
     
 ## Data Model
 
 Below is a screenshot of the data model after cleansed and prepared tables were read into Power BI.
 
-The FACT table **(FACT_Exercise)** is connected to two dimension tables **(DIM_Activity and DIM_Date)** with the correct relationship established (1 to *) between dimension and fact tables.
+This data model shows how Fact tables **FACT_Budget** and **FACT_InternetSales** are connected to other necessary DIM tables.
 
-![GitHub Fact_Exercise](/images/Data_Model.PNG)
+![GitHub Sales_Data_Model](/images/Data_Model.PNG)
 
 ## Calculations
 
 The following calculations were created in the Power BI reports using DAX (Data Analysis Expressions). To lessen the extent of coding, the re-use of measures (measure branching) was emphasized:
 
-**Average Steps** – This is a simple AVERAGE function around the Steps column:
-AVERAGE( FACT_Activity[Steps] )
+**Budget Amount** = SUM(FACT_Budgets[Budget])
 
-**Total Steps** – This is a simple SUM function around the Steps column:
-SUM( FACT_Activity[Steps] )
+**Total Sales** = SUM(FACT_InternetSales[SalesAmount])
 
-**Steps (Running)** – This is a calculation to isolate the Total Steps measure by filtering it by the “Running Activity”:
+**Sales - Budgets** = [Total Sales] - [Budget Amount]
 
-CALCULATE(
-[Total Steps],
-DIM_Activity[ActivityName] = “Running”
-)
-
-**Steps (Walking)** – This is a calculation to isolate the Total Steps measure by filtering it by the “Walking Activity”:
-
-CALCULATE(
-[Total Steps],
-DIM_Activity[ActivityName] = “Walking”
-)
-
-**Running % of Total** – Here we are using two measures from before to find the % of steps that were done by running:
-
-DIVIDE(
-[Steps (Running)],
-[Total Steps]
-)
-
-**Walking % of Total** – Here we are using two measures from before to find the % of steps that were done by walking:
-
-DIVIDE(
-[Steps (Walking)],
-[Total Steps]
-)
-
-**Total Steps (Cumulative)** – Here we are re-using the Total Steps measure and using different functions to cumulatively calculate the total steps:
-
-CALCULATE(
-[Total Steps],
-FILTER(
-ALLSELECTED( DIM_Date ),
-DIM_Date[Date]
-<= MAX( FACT_Activity[Date] )
-)
-)
-
-**Week Over Week % Change Steps** – Here we are using the Total Steps measure and using different functions, with variables, to calculate the Week over Week % Change of Steps:
-
-VAR CurrentWeek =
-CALCULATE(
-[Total Steps],
-FILTER(
-ALL( DIM_Date ),
-DIM_Date[Week of Year]
-= SELECTEDVALUE( DIM_Date[Week of Year] )
-)
-)
-VAR PreviousWeek =
-CALCULATE(
-[Total Steps],
-FILTER(
-ALL( DIM_Date ),
-DIM_Date[Week of Year]
-= SELECTEDVALUE( DIM_Date[Week of Year] ) – 1
-)
-)
-RETURN
-DIVIDE(
-( CurrentWeek – PreviousWeek ),
-PreviousWeek
-)
+**Sales per Budget** = DIVIDE([Sales], [Budget Amount])
 
 
 ## Exercise Analysis Dashboard
 
-The finish report consists of two different dashboards. One is more of a basic version, while the second version contains more advanced visualizations. To enable these visualizations the calculation language DAX (Data Analysis Expressions) were used.
+The finished sales analysis dashboard with one page which works as a dashboard and overview, with other page focused on combining tables for necessary details and visualizations to show sales over time, per customers and per products. 
 
-### Basic Analysis
+### Sales Overview Analysis
 
-![GitHub Fact_Exercise](/images/Basic_Calculation.PNG)
+![GitHub Sales_overview](/images/Sales_Overview.PNG)
 
-### Advance Calculation
+### Customer Detail Analysis
 
-![GitHub Fact_Exercise](/images/Advance_Calculation.PNG)
+![GitHub Customer_overview](/images/Customer_Details.PNG)
